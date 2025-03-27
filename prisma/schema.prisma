@@ -1,0 +1,505 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ENUMS
+
+enum UserRole {
+  TENANT
+  LANDLORD
+  PROPERTY_MANAGER
+  ADMIN
+}
+
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum LeaseStatus {
+  DRAFT
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  RENEWED
+}
+
+enum PaymentStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentType {
+  RENT
+  DEPOSIT
+  LATE_FEE
+  MAINTENANCE
+  UTILITY
+  OTHER
+}
+
+enum MaintenanceRequestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum NotificationType {
+  PAYMENT_REMINDER
+  PAYMENT_RECEIVED
+  LEASE_EXPIRING
+  MAINTENANCE_UPDATE
+  APPLICATION_UPDATE
+  MESSAGE
+  DOCUMENT_SHARED
+  INVOICE_CREATED
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PARTIALLY_PAID
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+// MODELS
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  name                String?
+  phone               String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  role                UserRole             @default(TENANT)
+  profileImageUrl     String?
+  verified            Boolean              @default(false)
+  // Relations
+  tenantsProfile      Tenant?
+  landlordProfile     Landlord?
+  managerProfile      PropertyManager?
+  organizations       OrganizationMember[]
+  notifications       Notification[]
+  maintenanceRequests MaintenanceRequest[] @relation("RequestedBy")
+  documents           Document[]           @relation("UploadedBy")
+  messages            Message[]            @relation("MessageAuthor")
+  messagesReceived    Message[]            @relation("MessageRecipient")
+  emailVerified       Boolean
+  image               String?
+  sessions            Session[]
+  accounts            Account[]
+
+  @@map("user")
+}
+
+model Organization {
+  id             String               @id @default(cuid())
+  name           String
+  logo           String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  // Relations
+  members        OrganizationMember[]
+  properties     Property[]
+  subscriptionId String?
+  billingEmail   String?
+}
+
+model OrganizationMember {
+  id             String       @id @default(cuid())
+  userId         String
+  organizationId String
+  role           UserRole
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  // Relations
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, organizationId])
+}
+
+model Landlord {
+  id              String     @id @default(cuid())
+  userId          String     @unique
+  taxId           String?
+  businessName    String?
+  businessAddress String?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  // Relations
+  user            User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  properties      Property[]
+}
+
+model PropertyManager {
+  id                String                     @id @default(cuid())
+  userId            String                     @unique
+  licenseNumber     String?
+  createdAt         DateTime                   @default(now())
+  updatedAt         DateTime                   @updatedAt
+  // Relations
+  user              User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  managedProperties PropertyManager_Property[]
+}
+
+model PropertyManager_Property {
+  managerId  String
+  propertyId String
+  assignedAt DateTime        @default(now())
+  // Relations
+  manager    PropertyManager @relation(fields: [managerId], references: [id], onDelete: Cascade)
+  property   Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@id([managerId, propertyId])
+}
+
+model Tenant {
+  id           String        @id @default(cuid())
+  userId       String        @unique
+  dateOfBirth  DateTime?
+  occupation   String?
+  income       Decimal?      @db.Decimal(10, 2)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  applications Application[]
+  leases       Lease[]
+  payments     Payment[]
+  invoices     Invoice[]
+}
+
+model Property {
+  id                  String                     @id @default(cuid())
+  title               String
+  description         String?                    @db.Text
+  address             String
+  city                String
+  state               String
+  zipCode             String
+  country             String
+  latitude            Float?
+  longitude           Float?
+  price               Decimal                    @db.Decimal(10, 2)
+  bedrooms            Int
+  bathrooms           Float
+  squareFootage       Int
+  yearBuilt           Int?
+  propertyType        String // Apartment, House, Condo, etc.
+  availabilityDate    DateTime?
+  isActive            Boolean                    @default(true)
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  organizationId      String?
+  landlordId          String?
+  // Relations
+  organization        Organization?              @relation(fields: [organizationId], references: [id])
+  landlord            Landlord?                  @relation(fields: [landlordId], references: [id])
+  managers            PropertyManager_Property[]
+  units               Unit[]
+  amenities           PropertyAmenity[]
+  images              PropertyImage[]
+  applications        Application[]
+  maintenanceRequests MaintenanceRequest[]
+}
+
+model Unit {
+  id               String        @id @default(cuid())
+  propertyId       String
+  unitNumber       String
+  floorPlan        String?
+  squareFootage    Int
+  bedrooms         Int
+  bathrooms        Float
+  price            Decimal       @db.Decimal(10, 2)
+  isAvailable      Boolean       @default(true)
+  availabilityDate DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  // Relations
+  property         Property      @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  leases           Lease[]
+  applications     Application[]
+}
+
+model PropertyAmenity {
+  id          String   @id @default(cuid())
+  propertyId  String
+  name        String
+  description String?
+  // Relations
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+
+  @@unique([propertyId, name])
+}
+
+model PropertyImage {
+  id         String   @id @default(cuid())
+  propertyId String
+  url        String
+  caption    String?
+  isPrimary  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  // Relations
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+model Application {
+  id                 String            @id @default(cuid())
+  tenantId           String
+  propertyId         String
+  unitId             String?
+  status             ApplicationStatus @default(PENDING)
+  moveInDate         DateTime
+  applicationFee     Decimal           @db.Decimal(10, 2)
+  applicationFeePaid Boolean           @default(false)
+  documents          Document[]
+  notes              String?           @db.Text
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  // Relations
+  tenant             Tenant            @relation(fields: [tenantId], references: [id])
+  property           Property          @relation(fields: [propertyId], references: [id])
+  unit               Unit?             @relation(fields: [unitId], references: [id])
+  lease              Lease?
+}
+
+model Lease {
+  id              String       @id @default(cuid())
+  applicationId   String?      @unique
+  unitId          String
+  tenantId        String
+  startDate       DateTime
+  endDate         DateTime
+  rentAmount      Decimal      @db.Decimal(10, 2)
+  securityDeposit Decimal      @db.Decimal(10, 2)
+  status          LeaseStatus  @default(DRAFT)
+  documentUrl     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  // Relations
+  application     Application? @relation(fields: [applicationId], references: [id])
+  unit            Unit         @relation(fields: [unitId], references: [id])
+  tenant          Tenant       @relation(fields: [tenantId], references: [id])
+  payments        Payment[]
+  documents       Document[]
+  invoices        Invoice[]
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  leaseId          String
+  tenantId         String
+  invoiceNumber    String        @unique
+  amount           Decimal       @db.Decimal(10, 2)
+  status           InvoiceStatus @default(DRAFT)
+  issueDate        DateTime      @default(now())
+  dueDate          DateTime
+  paymentReference String?
+  notes            String?       @db.Text
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  // Relations
+  lease            Lease         @relation(fields: [leaseId], references: [id])
+  tenant           Tenant        @relation(fields: [tenantId], references: [id])
+  lineItems        InvoiceItem[]
+  payments         Payment[]
+}
+
+model InvoiceItem {
+  id          String  @id @default(cuid())
+  invoiceId   String
+  description String
+  amount      Decimal @db.Decimal(10, 2)
+  quantity    Int     @default(1)
+  // Relations
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  leaseId       String
+  tenantId      String
+  invoiceId     String?
+  amount        Decimal       @db.Decimal(10, 2)
+  type          PaymentType
+  status        PaymentStatus @default(PENDING)
+  dueDate       DateTime
+  paidDate      DateTime?
+  transactionId String?
+  notes         String?       @db.Text
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  // Relations
+  lease         Lease         @relation(fields: [leaseId], references: [id])
+  tenant        Tenant        @relation(fields: [tenantId], references: [id])
+  invoice       Invoice?      @relation(fields: [invoiceId], references: [id])
+}
+
+model MaintenanceRequest {
+  id            String                    @id @default(cuid())
+  propertyId    String
+  requestedById String
+  title         String
+  description   String                    @db.Text
+  priority      String // High, Medium, Low
+  status        MaintenanceRequestStatus  @default(PENDING)
+  createdAt     DateTime                  @default(now())
+  updatedAt     DateTime                  @updatedAt
+  scheduledDate DateTime?
+  completedDate DateTime?
+  // Relations
+  property      Property                  @relation(fields: [propertyId], references: [id])
+  requestedBy   User                      @relation("RequestedBy", fields: [requestedById], references: [id])
+  images        MaintenanceRequestImage[]
+  updates       MaintenanceUpdate[]
+}
+
+model MaintenanceRequestImage {
+  id        String             @id @default(cuid())
+  requestId String
+  url       String
+  createdAt DateTime           @default(now())
+  // Relations
+  request   MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model MaintenanceUpdate {
+  id        String             @id @default(cuid())
+  requestId String
+  note      String             @db.Text
+  createdAt DateTime           @default(now())
+  // Relations
+  request   MaintenanceRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+}
+
+model Document {
+  id            String       @id @default(cuid())
+  name          String
+  url           String
+  type          String // Lease, Application, ID, Proof of Income, etc.
+  uploadedById  String
+  createdAt     DateTime     @default(now())
+  // Relations
+  uploadedBy    User         @relation("UploadedBy", fields: [uploadedById], references: [id])
+  application   Application? @relation(fields: [applicationId], references: [id])
+  applicationId String?
+  lease         Lease?       @relation(fields: [leaseId], references: [id])
+  leaseId       String?
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  actionUrl String?
+  createdAt DateTime         @default(now())
+  // Relations
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  senderId    String
+  recipientId String
+  content     String   @db.Text
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  // Relations
+  sender      User     @relation("MessageAuthor", fields: [senderId], references: [id])
+  recipient   User     @relation("MessageRecipient", fields: [recipientId], references: [id])
+}
+
+// Analytics models to store aggregated data
+
+model PropertyAnalytics {
+  id                 String   @id @default(cuid())
+  propertyId         String   @unique
+  viewCount          Int      @default(0)
+  applicationCount   Int      @default(0)
+  occupancyRate      Float? // Percentage
+  averageLeaseLength Int? // Days
+  updatedAt          DateTime @updatedAt
+}
+
+model FinancialSummary {
+  id             String   @id @default(cuid())
+  organizationId String?
+  landlordId     String?
+  month          Int
+  year           Int
+  totalRevenue   Decimal  @db.Decimal(10, 2)
+  totalExpenses  Decimal  @db.Decimal(10, 2)
+  netIncome      Decimal  @db.Decimal(10, 2)
+  occupancyRate  Float?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, month, year])
+  @@unique([landlordId, month, year])
+}
+
+model Session {
+  id        String   @id
+  expiresAt DateTime
+  token     String
+  createdAt DateTime
+  updatedAt DateTime
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([token])
+  @@map("session")
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime
+  updatedAt             DateTime
+
+  @@map("account")
+}
+
+model Verification {
+  id         String    @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime?
+  updatedAt  DateTime?
+
+  @@map("verification")
+}
