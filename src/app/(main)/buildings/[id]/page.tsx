@@ -1,4 +1,4 @@
-import { getBuildingById } from "@/actions/building";
+import { getBuildingById } from "@/actions/building/get-building-by-id";
 import { getCurrentUser } from "@/actions/user";
 import { BuildingDetailsPage } from "@/components/building/BuildingDetailsPage";
 import { notFound, redirect } from "next/navigation";
@@ -28,5 +28,5 @@ export default async function BuildingPage({
     notFound();
   }
 
-  return <BuildingDetailsPage building={result.data} />;
+  return <BuildingDetailsPage building={result.data} userId={currentUser.id} />;
 }

@@ -2,12 +2,13 @@
 
 import { prisma } from "@/lib/prisma";
 import { getCurrentUser } from "./user";
+import { LandlordDashboard, PropertyWithUnits, User } from "@/types/user";
 
 /**
  * Gets detailed landlord data for the current authenticated user
  * Includes properties, organization memberships, and stats
  */
-export async function getLandlordDashboardData() {
+export async function getLandlordDashboardData(): Promise<LandlordDashboard | null> {
   const currentUser = await getCurrentUser();
 
   if (
@@ -60,7 +61,7 @@ export async function getLandlordDashboardData() {
   // You could add more stats here - financial summaries, occupancy rates, etc.
 
   return {
-    landlord,
+    landlord: landlord as any, // Cast to LandlordWithProperties
     stats: {
       propertyCount,
       unitCount,
@@ -71,7 +72,7 @@ export async function getLandlordDashboardData() {
 /**
  * Gets all properties for the current authenticated landlord
  */
-export async function getLandlordProperties() {
+export async function getLandlordProperties(): Promise<PropertyWithUnits[]> {
   const currentUser = await getCurrentUser();
 
   if (
@@ -98,7 +99,12 @@ export async function getLandlordProperties() {
             include: {
               tenant: {
                 include: {
-                  user: true,
+                  contacts: {
+                    where: {
+                      isPrimary: true,
+                    },
+                    take: 1,
+                  },
                 },
               },
             },
@@ -106,5 +112,5 @@ export async function getLandlordProperties() {
         },
       },
     },
-  });
+  }) as Promise<PropertyWithUnits[]>;
 }

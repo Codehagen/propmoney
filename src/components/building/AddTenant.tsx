@@ -55,6 +55,7 @@ interface AddTenantProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   buildingId?: string;
+  userId?: string;
   onAddTenant?: (tenant: any) => void;
 }
 
@@ -337,6 +338,7 @@ export function AddTenant({
   open,
   onOpenChange,
   buildingId,
+  userId,
   onAddTenant,
 }: AddTenantProps) {
   const [formData, setFormData] = useState<TenantFormData>({

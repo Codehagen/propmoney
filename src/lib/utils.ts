@@ -89,6 +89,8 @@ export const formatDate = (
 };
 
 export const formatters: { [key: string]: any } = {
+  number: (number: number, decimals = 0) =>
+    `${usNumberformatter(number, decimals)}`,
   currency: (number: number, currency: string = "USD") =>
     new Intl.NumberFormat("en-US", {
       style: "currency",
@@ -102,4 +104,5 @@ export const formatters: { [key: string]: any } = {
     formatDate(date, "EEEE, dd MMMM yyyy"),
   dateTime: (date: Date | string | null | undefined) =>
     formatDate(date, "dd.MM.yyyy HH:mm"),
+  percent: (number: number) => percentageFormatter(number),
 };

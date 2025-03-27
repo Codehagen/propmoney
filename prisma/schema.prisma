@@ -34,6 +34,31 @@ enum LeaseStatus {
   RENEWED
 }
 
+enum LeaseType {
+  TRIPLE_NET // Tenant pays rent plus all expenses (NNN)
+  MODIFIED_GROSS // Tenant pays rent plus some expenses
+  FULL_SERVICE // Landlord pays all expenses (Gross)
+  PERCENTAGE // Base rent plus percentage of sales
+}
+
+enum PropertyClass {
+  CLASS_A
+  CLASS_B
+  CLASS_C
+  CLASS_D
+}
+
+enum PropertyType {
+  OFFICE
+  RETAIL
+  INDUSTRIAL
+  WAREHOUSE
+  MIXED_USE
+  HOSPITALITY
+  HEALTHCARE
+  OTHER
+}
+
 enum PaymentStatus {
   PENDING
   PAID
@@ -45,9 +70,12 @@ enum PaymentStatus {
 enum PaymentType {
   RENT
   DEPOSIT
-  LATE_FEE
-  MAINTENANCE
+  CAM
+  PROPERTY_TAX
+  INSURANCE
   UTILITY
+  MAINTENANCE
+  LATE_FEE
   OTHER
 }
 
@@ -56,6 +84,12 @@ enum MaintenanceRequestStatus {
   IN_PROGRESS
   COMPLETED
   CANCELLED
+}
+
+enum MaintenancePriority {
+  HIGH
+  MEDIUM
+  LOW
 }
 
 enum NotificationType {
@@ -67,6 +101,8 @@ enum NotificationType {
   MESSAGE
   DOCUMENT_SHARED
   INVOICE_CREATED
+  CAM_RECONCILIATION
+  EXPENSE_UPDATE
 }
 
 enum InvoiceStatus {
@@ -77,6 +113,28 @@ enum InvoiceStatus {
   OVERDUE
   CANCELLED
   REFUNDED
+}
+
+enum ExpenseCategory {
+  MAINTENANCE
+  CLEANING
+  SECURITY
+  UTILITIES
+  INSURANCE
+  PROPERTY_TAX
+  MANAGEMENT_FEE
+  LANDSCAPING
+  HVAC
+  ELEVATOR
+  ADMINISTRATIVE
+  OTHER
+}
+
+enum RentEscalationType {
+  FIXED
+  CPI
+  PERCENTAGE
+  STEPPED
 }
 
 // MODELS
@@ -91,8 +149,10 @@ model User {
   role                UserRole             @default(TENANT)
   profileImageUrl     String?
   verified            Boolean              @default(false)
+  emailVerified       Boolean              @default(false)
+  image               String?
   // Relations
-  tenantsProfile      Tenant?
+  tenantContacts      TenantContact[]
   landlordProfile     Landlord?
   managerProfile      PropertyManager?
   organizations       OrganizationMember[]
@@ -101,8 +161,6 @@ model User {
   documents           Document[]           @relation("UploadedBy")
   messages            Message[]            @relation("MessageAuthor")
   messagesReceived    Message[]            @relation("MessageRecipient")
-  emailVerified       Boolean
-  image               String?
   sessions            Session[]
   accounts            Account[]
 
@@ -120,6 +178,7 @@ model Organization {
   properties     Property[]
   subscriptionId String?
   billingEmail   String?
+  tenants        CommercialTenant[]
 }
 
 model OrganizationMember {
@@ -171,67 +230,104 @@ model PropertyManager_Property {
   @@id([managerId, propertyId])
 }
 
-model Tenant {
-  id           String        @id @default(cuid())
-  userId       String        @unique
-  dateOfBirth  DateTime?
-  occupation   String?
-  income       Decimal?      @db.Decimal(10, 2)
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
+model CommercialTenant {
+  id                 String           @id @default(cuid())
+  name               String
+  organizationNumber String? // Norwegian business registration number
+  vatNumber          String?
+  industry           String?
+  foundedYear        Int?
+  website            String?
+  organizationId     String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
   // Relations
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  applications Application[]
-  leases       Lease[]
-  payments     Payment[]
-  invoices     Invoice[]
+  organization       Organization?    @relation(fields: [organizationId], references: [id])
+  contacts           TenantContact[]
+  applications       Application[]
+  leases             Lease[]
+  payments           Payment[]
+  invoices           Invoice[]
+  financials         TenantFinancial?
+}
+
+model TenantContact {
+  id        String           @id @default(cuid())
+  tenantId  String
+  userId    String?
+  name      String
+  email     String
+  phone     String?
+  position  String?
+  isPrimary Boolean          @default(false)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  // Relations
+  tenant    CommercialTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User?            @relation(fields: [userId], references: [id])
+}
+
+model TenantFinancial {
+  id              String           @id @default(cuid())
+  tenantId        String           @unique
+  annualRevenue   Decimal?         @db.Decimal(14, 2)
+  creditScore     Int?
+  financialRating String? // e.g., AAA, BBB
+  lastUpdated     DateTime         @default(now())
+  // Relations
+  tenant          CommercialTenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 }
 
 model Property {
-  id                  String                     @id @default(cuid())
-  title               String
-  description         String?                    @db.Text
-  address             String
-  city                String
-  state               String
-  zipCode             String
-  country             String
-  latitude            Float?
-  longitude           Float?
-  price               Decimal                    @db.Decimal(10, 2)
-  bedrooms            Int
-  bathrooms           Float
-  squareFootage       Int
-  yearBuilt           Int?
-  propertyType        String // Apartment, House, Condo, etc.
-  availabilityDate    DateTime?
-  isActive            Boolean                    @default(true)
-  createdAt           DateTime                   @default(now())
-  updatedAt           DateTime                   @updatedAt
-  organizationId      String?
-  landlordId          String?
+  id                    String                     @id @default(cuid())
+  title                 String
+  description           String?                    @db.Text
+  address               String
+  city                  String
+  state                 String
+  zipCode               String
+  country               String                     @default("Norway")
+  latitude              Float?
+  longitude             Float?
+  propertyType          PropertyType               @default(OFFICE)
+  propertyClass         PropertyClass?
+  yearBuilt             Int?
+  totalBTA              Int // Bruttoareal (Gross Area) in m²
+  totalBRA              Int // Bruksareal (Usable Area) in m²
+  commonAreaBRA         Int? // Common Area in m²
+  floors                Int                        @default(1)
+  parkingSpaces         Int?
+  isActive              Boolean                    @default(true)
+  availabilityDate      DateTime?
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  organizationId        String?
+  landlordId            String?
   // Relations
-  organization        Organization?              @relation(fields: [organizationId], references: [id])
-  landlord            Landlord?                  @relation(fields: [landlordId], references: [id])
-  managers            PropertyManager_Property[]
-  units               Unit[]
-  amenities           PropertyAmenity[]
-  images              PropertyImage[]
-  applications        Application[]
-  maintenanceRequests MaintenanceRequest[]
+  organization          Organization?              @relation(fields: [organizationId], references: [id])
+  landlord              Landlord?                  @relation(fields: [landlordId], references: [id])
+  managers              PropertyManager_Property[]
+  units                 CommercialUnit[]
+  amenities             PropertyAmenity[]
+  images                PropertyImage[]
+  applications          Application[]
+  maintenanceRequests   MaintenanceRequest[]
+  expenses              OperatingExpense[]
+  camSettings           CamSettings?
+  financialYearSettings FinancialYearSettings?
 }
 
-model Unit {
+model CommercialUnit {
   id               String        @id @default(cuid())
   propertyId       String
   unitNumber       String
-  floorPlan        String?
-  squareFootage    Int
-  bedrooms         Int
-  bathrooms        Float
-  price            Decimal       @db.Decimal(10, 2)
+  floor            Int
+  bra              Int // Bruksareal (Usable Area) in m²
+  commonAreaFactor Float         @default(1.0) // For calculating share of common expenses
+  basePrice        Decimal       @db.Decimal(10, 2) // Base price per m² per year
   isAvailable      Boolean       @default(true)
   availabilityDate DateTime?
+  description      String?       @db.Text
   createdAt        DateTime      @default(now())
   updatedAt        DateTime      @updatedAt
   // Relations
@@ -263,63 +359,146 @@ model PropertyImage {
 }
 
 model Application {
-  id                 String            @id @default(cuid())
-  tenantId           String
-  propertyId         String
-  unitId             String?
-  status             ApplicationStatus @default(PENDING)
-  moveInDate         DateTime
-  applicationFee     Decimal           @db.Decimal(10, 2)
-  applicationFeePaid Boolean           @default(false)
-  documents          Document[]
-  notes              String?           @db.Text
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  id             String            @id @default(cuid())
+  tenantId       String
+  propertyId     String
+  unitId         String?
+  status         ApplicationStatus @default(PENDING)
+  moveInDate     DateTime
+  applicationFee Decimal?          @db.Decimal(10, 2)
+  feeStatus      PaymentStatus     @default(PENDING)
+  documents      Document[]
+  notes          String?           @db.Text
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
   // Relations
-  tenant             Tenant            @relation(fields: [tenantId], references: [id])
-  property           Property          @relation(fields: [propertyId], references: [id])
-  unit               Unit?             @relation(fields: [unitId], references: [id])
-  lease              Lease?
+  tenant         CommercialTenant  @relation(fields: [tenantId], references: [id])
+  property       Property          @relation(fields: [propertyId], references: [id])
+  unit           CommercialUnit?   @relation(fields: [unitId], references: [id])
+  lease          Lease?
+}
+
+model RentEscalation {
+  id            String             @id @default(cuid())
+  leaseId       String
+  type          RentEscalationType
+  frequency     Int                @default(12) // In months (12 = annual)
+  rate          Decimal            @db.Decimal(5, 2) // Percentage or fixed amount
+  baseIndex     Decimal?           @db.Decimal(10, 2) // For CPI based escalation
+  effectiveDate DateTime
+  // Relations
+  lease         Lease              @relation(fields: [leaseId], references: [id], onDelete: Cascade)
 }
 
 model Lease {
-  id              String       @id @default(cuid())
-  applicationId   String?      @unique
-  unitId          String
-  tenantId        String
-  startDate       DateTime
-  endDate         DateTime
-  rentAmount      Decimal      @db.Decimal(10, 2)
-  securityDeposit Decimal      @db.Decimal(10, 2)
-  status          LeaseStatus  @default(DRAFT)
-  documentUrl     String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  id                     String           @id @default(cuid())
+  applicationId          String?          @unique
+  unitId                 String
+  tenantId               String
+  startDate              DateTime
+  endDate                DateTime
+  leaseType              LeaseType        @default(TRIPLE_NET)
+  baseRentAmount         Decimal          @db.Decimal(12, 2) // Annual base rent
+  rentPerSqm             Decimal          @db.Decimal(10, 2) // Rent per square meter per year
+  securityDeposit        Decimal          @db.Decimal(12, 2)
+  noticePeriodDays       Int              @default(90)
+  hasTenantOptionToRenew Boolean          @default(false)
+  tenantImprovements     Decimal?         @db.Decimal(12, 2) // Tenant improvement allowance
+  status                 LeaseStatus      @default(DRAFT)
+  documentUrl            String?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
   // Relations
-  application     Application? @relation(fields: [applicationId], references: [id])
-  unit            Unit         @relation(fields: [unitId], references: [id])
-  tenant          Tenant       @relation(fields: [tenantId], references: [id])
-  payments        Payment[]
-  documents       Document[]
-  invoices        Invoice[]
+  application            Application?     @relation(fields: [applicationId], references: [id])
+  unit                   CommercialUnit   @relation(fields: [unitId], references: [id])
+  tenant                 CommercialTenant @relation(fields: [tenantId], references: [id])
+  rentEscalations        RentEscalation[]
+  payments               Payment[]
+  documents              Document[]
+  invoices               Invoice[]
+  camCharges             CamCharge[]
+}
+
+model CamSettings {
+  id                  String   @id @default(cuid())
+  propertyId          String   @unique
+  reconciliationMonth Int      @default(12) // Month when CAM is reconciled (1-12)
+  estimationMethod    String   @default("PREVIOUS_YEAR") // PREVIOUS_YEAR, BUDGET, FIXED
+  adminFeePercentage  Decimal  @default(0) @db.Decimal(5, 2)
+  // Relations
+  property            Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+model FinancialYearSettings {
+  id         String   @id @default(cuid())
+  propertyId String   @unique
+  startMonth Int      @default(1) // 1 = January
+  startDay   Int      @default(1)
+  // Relations
+  property   Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+}
+
+model CamCharge {
+  id              String           @id @default(cuid())
+  leaseId         String
+  year            Int
+  monthlyEstimate Decimal          @db.Decimal(12, 2)
+  annualEstimate  Decimal          @db.Decimal(12, 2)
+  actualAmount    Decimal?         @db.Decimal(12, 2)
+  reconciled      Boolean          @default(false)
+  reconciledDate  DateTime?
+  notes           String?          @db.Text
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  // Relations
+  lease           Lease            @relation(fields: [leaseId], references: [id], onDelete: Cascade)
+  expenseItems    CamExpenseItem[]
+}
+
+model CamExpenseItem {
+  id          String          @id @default(cuid())
+  camChargeId String
+  category    ExpenseCategory
+  description String
+  estimate    Decimal         @db.Decimal(12, 2)
+  actual      Decimal?        @db.Decimal(12, 2)
+  // Relations
+  camCharge   CamCharge       @relation(fields: [camChargeId], references: [id], onDelete: Cascade)
+}
+
+model OperatingExpense {
+  id            String          @id @default(cuid())
+  propertyId    String
+  category      ExpenseCategory
+  vendorName    String?
+  description   String
+  amount        Decimal         @db.Decimal(12, 2)
+  date          DateTime
+  invoiceNumber String?
+  billable      Boolean         @default(true) // Whether this expense can be passed to tenants
+  notes         String?         @db.Text
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  // Relations
+  property      Property        @relation(fields: [propertyId], references: [id], onDelete: Cascade)
 }
 
 model Invoice {
-  id               String        @id @default(cuid())
+  id               String           @id @default(cuid())
   leaseId          String
   tenantId         String
-  invoiceNumber    String        @unique
-  amount           Decimal       @db.Decimal(10, 2)
-  status           InvoiceStatus @default(DRAFT)
-  issueDate        DateTime      @default(now())
+  invoiceNumber    String           @unique
+  amount           Decimal          @db.Decimal(12, 2)
+  status           InvoiceStatus    @default(DRAFT)
+  issueDate        DateTime         @default(now())
   dueDate          DateTime
   paymentReference String?
-  notes            String?       @db.Text
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  notes            String?          @db.Text
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
   // Relations
-  lease            Lease         @relation(fields: [leaseId], references: [id])
-  tenant           Tenant        @relation(fields: [tenantId], references: [id])
+  lease            Lease            @relation(fields: [leaseId], references: [id])
+  tenant           CommercialTenant @relation(fields: [tenantId], references: [id])
   lineItems        InvoiceItem[]
   payments         Payment[]
 }
@@ -328,30 +507,30 @@ model InvoiceItem {
   id          String  @id @default(cuid())
   invoiceId   String
   description String
-  amount      Decimal @db.Decimal(10, 2)
+  amount      Decimal @db.Decimal(12, 2)
   quantity    Int     @default(1)
   // Relations
   invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 }
 
 model Payment {
-  id            String        @id @default(cuid())
+  id            String           @id @default(cuid())
   leaseId       String
   tenantId      String
   invoiceId     String?
-  amount        Decimal       @db.Decimal(10, 2)
+  amount        Decimal          @db.Decimal(12, 2)
   type          PaymentType
-  status        PaymentStatus @default(PENDING)
+  status        PaymentStatus    @default(PENDING)
   dueDate       DateTime
   paidDate      DateTime?
   transactionId String?
-  notes         String?       @db.Text
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  notes         String?          @db.Text
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
   // Relations
-  lease         Lease         @relation(fields: [leaseId], references: [id])
-  tenant        Tenant        @relation(fields: [tenantId], references: [id])
-  invoice       Invoice?      @relation(fields: [invoiceId], references: [id])
+  lease         Lease            @relation(fields: [leaseId], references: [id])
+  tenant        CommercialTenant @relation(fields: [tenantId], references: [id])
+  invoice       Invoice?         @relation(fields: [invoiceId], references: [id])
 }
 
 model MaintenanceRequest {
@@ -360,12 +539,15 @@ model MaintenanceRequest {
   requestedById String
   title         String
   description   String                    @db.Text
-  priority      String // High, Medium, Low
+  priority      MaintenancePriority       @default(MEDIUM)
   status        MaintenanceRequestStatus  @default(PENDING)
   createdAt     DateTime                  @default(now())
   updatedAt     DateTime                  @updatedAt
   scheduledDate DateTime?
   completedDate DateTime?
+  estimatedCost Decimal?                  @db.Decimal(10, 2)
+  actualCost    Decimal?                  @db.Decimal(10, 2)
+  billToTenant  Boolean                   @default(false)
   // Relations
   property      Property                  @relation(fields: [propertyId], references: [id])
   requestedBy   User                      @relation("RequestedBy", fields: [requestedById], references: [id])
@@ -395,7 +577,7 @@ model Document {
   id            String       @id @default(cuid())
   name          String
   url           String
-  type          String // Lease, Application, ID, Proof of Income, etc.
+  type          String // Lease, Application, Financial, Insurance, etc.
   uploadedById  String
   createdAt     DateTime     @default(now())
   // Relations
@@ -434,29 +616,35 @@ model Message {
 // Analytics models to store aggregated data
 
 model PropertyAnalytics {
-  id                 String   @id @default(cuid())
-  propertyId         String   @unique
-  viewCount          Int      @default(0)
-  applicationCount   Int      @default(0)
-  occupancyRate      Float? // Percentage
-  averageLeaseLength Int? // Days
-  updatedAt          DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  propertyId           String   @unique
+  viewCount            Int      @default(0)
+  applicationCount     Int      @default(0)
+  occupancyRatePercent Float?
+  occupancyRateArea    Int? // Occupied area in m²
+  avgLeaseLength       Int? // Average lease length in months
+  avgRentPerSqm        Decimal? @db.Decimal(10, 2)
+  updatedAt            DateTime @updatedAt
 }
 
 model FinancialSummary {
-  id             String   @id @default(cuid())
-  organizationId String?
-  landlordId     String?
-  month          Int
-  year           Int
-  totalRevenue   Decimal  @db.Decimal(10, 2)
-  totalExpenses  Decimal  @db.Decimal(10, 2)
-  netIncome      Decimal  @db.Decimal(10, 2)
-  occupancyRate  Float?
-  updatedAt      DateTime @updatedAt
+  id                   String   @id @default(cuid())
+  organizationId       String?
+  landlordId           String?
+  propertyId           String?
+  month                Int
+  year                 Int
+  totalRevenue         Decimal  @db.Decimal(14, 2)
+  totalExpenses        Decimal  @db.Decimal(14, 2)
+  operatingExpenses    Decimal  @db.Decimal(14, 2)
+  netOperatingIncome   Decimal  @db.Decimal(14, 2)
+  occupancyRatePercent Float?
+  capRate              Float?
+  updatedAt            DateTime @updatedAt
 
   @@unique([organizationId, month, year])
   @@unique([landlordId, month, year])
+  @@unique([propertyId, month, year])
 }
 
 model Session {

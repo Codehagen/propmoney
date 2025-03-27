@@ -9,22 +9,26 @@ import { ConditionFilter } from "../data-table/DataTableFilter";
 import { BuildingRowActions } from "./BuildingRowActions";
 import { DataTableFilter } from "../data-table/DataTableFilter";
 import Link from "next/link";
+import { PropertyType, PropertyClass } from "@prisma/client";
 
-// Define the Property type based on our schema
+// Define the Property type based on our commercial real estate schema
 export type BuildingData = {
   id: string;
-  title: string; // Keep in type but don't show in table
+  title: string;
   address: string;
   city: string;
-  state: string; // Keep in type but don't show in table
+  state: string;
   zipCode: string;
-  propertyType: string;
-  bedrooms: number;
-  bathrooms: number;
-  price: number; // This is now rental price
+  propertyType: PropertyType;
+  propertyClass?: PropertyClass;
+  totalBTA: number; // Total gross area in m²
+  totalBRA: number; // Total usable area in m²
+  unitCount?: number; // Number of units
+  units?: { id: string }[]; // For counting units
   isActive: boolean;
   availabilityDate: string;
-  createdAt: string; // Keep in type but don't show in table
+  createdAt: string;
+  occupancyRate?: number; // Calculated field (percentage)
 };
 
 // Define column meta type to include filterVariant
@@ -35,14 +39,16 @@ type ColumnMeta = {
   options?: { label: string; value: string }[];
 };
 
-// Define property types available in Norway
+// Define commercial property types
 export const propertyTypes = [
-  { label: "Leilighet", value: "Leilighet" },
-  { label: "Enebolig", value: "Enebolig" },
-  { label: "Rekkehus", value: "Rekkehus" },
-  { label: "Tomannsbolig", value: "Tomannsbolig" },
-  { label: "Fritidsbolig", value: "Fritidsbolig" },
-  { label: "Hytte", value: "Hytte" },
+  { label: "Kontor", value: "OFFICE" },
+  { label: "Butikk", value: "RETAIL" },
+  { label: "Lager", value: "WAREHOUSE" },
+  { label: "Industri", value: "INDUSTRIAL" },
+  { label: "Kombinasjon", value: "MIXED_USE" },
+  { label: "Hotell", value: "HOSPITALITY" },
+  { label: "Helse", value: "HEALTHCARE" },
+  { label: "Annet", value: "OTHER" },
 ];
 
 // Define Norwegian cities
@@ -62,28 +68,12 @@ export const statusOptions = [
   { label: "Inaktiv", value: "false" },
 ];
 
-// Define number conditions for price filtering
-export const priceConditions = [
+// Define number conditions for area filtering
+export const areaConditions = [
   { label: "Er lik", value: "is-equal-to" },
   { label: "Er mellom", value: "is-between" },
   { label: "Er større enn", value: "is-greater-than" },
   { label: "Er mindre enn", value: "is-less-than" },
-];
-
-export const bedroomOptions = [
-  { label: "1", value: "1" },
-  { label: "2", value: "2" },
-  { label: "3", value: "3" },
-  { label: "4", value: "4" },
-  { label: "5+", value: "5" },
-];
-
-export const bathroomOptions = [
-  { label: "1", value: "1" },
-  { label: "1.5", value: "1.5" },
-  { label: "2", value: "2" },
-  { label: "2.5", value: "2.5" },
-  { label: "3+", value: "3" },
 ];
 
 const columnHelper = createColumnHelper<BuildingData>();
@@ -119,46 +109,31 @@ export const columns = [
       displayName: "Velg",
     } as ColumnMeta,
   }),
-  columnHelper.accessor("address", {
+  columnHelper.accessor("title", {
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Adresse" />
+      <DataTableColumnHeader column={column} title="Eiendom" />
     ),
     enableSorting: true,
     filterFn: "includesString",
     meta: {
       className: "text-left",
-      displayName: "Adresse",
+      displayName: "Eiendom",
       filterVariant: "text",
     } as ColumnMeta,
     cell: ({ row }) => {
-      const address = row.getValue("address") as string;
-      const city = row.getValue("city") as string;
-      const zipCode = row.getValue("zipCode") as string;
-      const id = row.original.id;
+      const title = row.getValue("title") as string;
+      const { address, city, zipCode, id } = row.original;
 
       return (
         <Link
           href={`/buildings/${id}`}
           className="block hover:text-indigo-600 cursor-pointer transition-colors"
         >
-          <div className="font-medium">{address}</div>
-          <div className="text-xs text-gray-500">{`${city} ${zipCode}`}</div>
+          <div className="font-medium">{title}</div>
+          <div className="text-xs text-gray-500">{`${address}, ${city} ${zipCode}`}</div>
         </Link>
       );
     },
-  }),
-  columnHelper.accessor("city", {
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="By" />
-    ),
-    enableSorting: true,
-    filterFn: "equals",
-    meta: {
-      className: "text-left",
-      displayName: "By",
-      filterVariant: "select",
-      options: norwegianCities,
-    } as ColumnMeta,
   }),
   columnHelper.accessor("propertyType", {
     header: ({ column }) => (
@@ -172,50 +147,31 @@ export const columns = [
       filterVariant: "select",
       options: propertyTypes,
     } as ColumnMeta,
+    cell: ({ row }) => {
+      const propertyType = row.getValue("propertyType") as PropertyType;
+
+      // Map enum value to display label
+      const typeLabel =
+        propertyTypes.find((t) => t.value === propertyType)?.label ||
+        propertyType;
+
+      return <span>{typeLabel}</span>;
+    },
   }),
-  columnHelper.accessor("bedrooms", {
+  columnHelper.accessor("totalBTA", {
     header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Soverom" />
-    ),
-    enableSorting: true,
-    filterFn: "equals",
-    meta: {
-      className: "text-center",
-      displayName: "Soverom",
-      filterVariant: "select",
-      options: bedroomOptions,
-    } as ColumnMeta,
-  }),
-  columnHelper.accessor("bathrooms", {
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Bad" />
-    ),
-    enableSorting: true,
-    filterFn: "equals",
-    meta: {
-      className: "text-center",
-      displayName: "Bad",
-      filterVariant: "select",
-      options: bathroomOptions,
-    } as ColumnMeta,
-  }),
-  columnHelper.accessor("price", {
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Leiepris" />
+      <DataTableColumnHeader column={column} title="Areal (BTA)" />
     ),
     enableSorting: true,
     meta: {
       className: "text-right",
-      displayName: "Leiepris",
+      displayName: "Areal (BTA)",
       filterVariant: "number",
-      options: priceConditions,
+      options: areaConditions,
     } as ColumnMeta,
     cell: ({ getValue }) => {
-      return (
-        <span className="font-medium">
-          {formatters.currency(getValue(), "NOK")}/mnd
-        </span>
-      );
+      const bta = getValue() as number;
+      return <span className="font-medium">{formatters.number(bta)} m²</span>;
     },
     filterFn: (row, columnId, filterValue: ConditionFilter) => {
       const value = row.getValue(columnId) as number;
@@ -235,6 +191,42 @@ export const columns = [
       }
     },
   }),
+  columnHelper.accessor((row) => row.units?.length || 0, {
+    id: "unitCount",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Antall enheter" />
+    ),
+    enableSorting: true,
+    meta: {
+      className: "text-center",
+      displayName: "Antall enheter",
+    } as ColumnMeta,
+  }),
+  columnHelper.accessor((row) => row.occupancyRate || 0, {
+    id: "occupancyRate",
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title="Utleiegrad" />
+    ),
+    enableSorting: true,
+    meta: {
+      className: "text-center",
+      displayName: "Utleiegrad",
+    } as ColumnMeta,
+    cell: ({ getValue }) => {
+      const rate = getValue() as number;
+
+      let variant: BadgeProps["variant"] = "default";
+      if (rate >= 90) variant = "success";
+      else if (rate >= 70) variant = "warning";
+      else if (rate < 70) variant = "error";
+
+      return (
+        <div className="flex justify-center">
+          <Badge variant={variant}>{formatters.percent(rate / 100)}</Badge>
+        </div>
+      );
+    },
+  }),
   columnHelper.accessor("isActive", {
     header: ({ column }) => (
       <DataTableColumnHeader column={column} title="Status" />
@@ -252,7 +244,7 @@ export const columns = [
       options: statusOptions,
     } as ColumnMeta,
     cell: ({ getValue }) => {
-      const isActive = getValue();
+      const isActive = getValue() as boolean;
       return (
         <Badge variant={isActive ? "success" : "warning"}>
           {isActive ? "Aktiv" : "Inaktiv"}
@@ -260,29 +252,12 @@ export const columns = [
       );
     },
   }),
-  columnHelper.accessor("availabilityDate", {
-    header: ({ column }) => (
-      <DataTableColumnHeader column={column} title="Tilgjengelig" />
-    ),
-    enableSorting: true,
-    meta: {
-      className: "tabular-nums",
-      displayName: "Tilgjengelig",
-    } as ColumnMeta,
-    cell: ({ getValue }) => {
-      const dateValue = getValue() as string;
-      return formatters.date(dateValue);
-    },
-  }),
   columnHelper.display({
     id: "actions",
-    header: "Handlinger",
-    enableSorting: false,
-    enableHiding: false,
+    cell: ({ row }) => <BuildingRowActions row={row} />,
     meta: {
       className: "text-right",
       displayName: "Handlinger",
     } as ColumnMeta,
-    cell: ({ row }) => <BuildingRowActions row={row} />,
   }),
-] as ColumnDef<BuildingData>[];
+];

@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/prisma";
 import { BuildingData } from "@/components/ui/buildings-table/columns";
 import { z } from "zod";
+import { PropertyClass, LeaseStatus } from "@prisma/client";
 
 // Define input schema
 const getBuildingByIdSchema = z.object({
@@ -32,6 +33,11 @@ export async function getBuildingById(
         },
         images: true,
         amenities: true,
+        units: {
+          include: {
+            leases: true,
+          },
+        },
         managers: {
           include: {
             manager: {
@@ -71,18 +77,34 @@ export async function getBuildingById(
       }
     }
 
-    // Map property data to BuildingData format
+    // Calculate occupancy rate
+    const totalUnits = property.units.length;
+    const occupiedUnits = property.units.filter((unit) =>
+      unit.leases.some(
+        (lease) =>
+          lease.status === LeaseStatus.ACTIVE &&
+          (!lease.endDate || new Date(lease.endDate) > new Date())
+      )
+    ).length;
+
+    const occupancyRate = totalUnits
+      ? Math.round((occupiedUnits / totalUnits) * 100)
+      : 0;
+
+    // Map property data to BuildingData format for commercial properties
     const buildingData: BuildingData = {
       id: property.id,
-      title: property.title || "",
+      title: property.title || property.address,
       address: property.address,
       city: property.city,
       state: property.state,
       zipCode: property.zipCode,
       propertyType: property.propertyType,
-      bedrooms: property.bedrooms,
-      bathrooms: property.bathrooms,
-      price: Number(property.price),
+      propertyClass: property.propertyClass || PropertyClass.CLASS_C,
+      totalBTA: property.totalBTA,
+      totalBRA: property.totalBRA,
+      unitCount: totalUnits,
+      occupancyRate: occupancyRate,
       isActive: property.isActive,
       availabilityDate: property.availabilityDate?.toISOString() || "",
       createdAt: property.createdAt.toISOString(),

@@ -23,11 +23,9 @@ import { DataTableFilter } from "../data-table/DataTableFilter";
 import {
   BuildingData,
   norwegianCities,
-  priceConditions,
+  areaConditions,
   propertyTypes,
   statusOptions,
-  bedroomOptions,
-  bathroomOptions,
 } from "./columns";
 
 import {
@@ -79,7 +77,7 @@ function Filterbar({ table }: FilterbarProps) {
   const [searchTerm, setSearchTerm] = useState<string>("");
 
   const debouncedSetFilterValue = useDebouncedCallback((value) => {
-    table.getColumn("address")?.setFilterValue(value);
+    table.getColumn("title")?.setFilterValue(value);
   }, 300);
 
   const handleSearchChange = (event: any) => {
@@ -99,28 +97,12 @@ function Filterbar({ table }: FilterbarProps) {
             type="select"
           />
         )}
-        {table.getColumn("city")?.getIsVisible() && (
+        {table.getColumn("totalBTA")?.getIsVisible() && (
           <DataTableFilter
-            column={table.getColumn("city")}
-            title="By"
-            options={norwegianCities}
-            type="select"
-          />
-        )}
-        {table.getColumn("bedrooms")?.getIsVisible() && (
-          <DataTableFilter
-            column={table.getColumn("bedrooms")}
-            title="Soverom"
-            options={bedroomOptions}
-            type="select"
-          />
-        )}
-        {table.getColumn("price")?.getIsVisible() && (
-          <DataTableFilter
-            column={table.getColumn("price")}
-            title="Leiepris"
+            column={table.getColumn("totalBTA")}
+            title="Areal (BTA)"
             type="number"
-            options={priceConditions}
+            options={areaConditions}
           />
         )}
         {table.getColumn("isActive")?.getIsVisible() && (
@@ -131,10 +113,10 @@ function Filterbar({ table }: FilterbarProps) {
             type="select"
           />
         )}
-        {table.getColumn("address")?.getIsVisible() && (
+        {table.getColumn("title")?.getIsVisible() && (
           <Searchbar
             type="search"
-            placeholder="Søk på adresse..."
+            placeholder="Søk på eiendom..."
             value={searchTerm}
             onChange={handleSearchChange}
             className="w-full sm:max-w-[250px] sm:[&>input]:h-[30px]"
@@ -164,7 +146,7 @@ function Filterbar({ table }: FilterbarProps) {
 }
 
 interface BuildingsTableProps {
-  columns: ColumnDef<BuildingData>[];
+  columns: ColumnDef<BuildingData, any>[];
   data: BuildingData[];
 }
 
@@ -248,21 +230,14 @@ export function BuildingsTable({ columns, data }: BuildingsTableProps) {
                     }}
                     className="group select-none hover:bg-gray-50 hover:dark:bg-gray-900 cursor-pointer"
                   >
-                    {row.getVisibleCells().map((cell, index) => (
+                    {row.getVisibleCells().map((cell) => (
                       <TableCell
                         key={cell.id}
                         className={cx(
-                          row.getIsSelected()
-                            ? "bg-gray-50 dark:bg-gray-900"
-                            : "",
-                          "relative whitespace-nowrap py-1 text-gray-600 first:w-10 dark:text-gray-400",
-                          cell.column.columnDef.meta?.className,
-                          cell.column.id === "actions" ? "actions-dropdown" : ""
+                          "align-middle py-2 px-4",
+                          cell.column.columnDef.meta?.className
                         )}
                       >
-                        {index === 0 && row.getIsSelected() && (
-                          <div className="absolute inset-y-0 left-0 w-0.5 bg-indigo-600 dark:bg-indigo-500" />
-                        )}
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext()
@@ -275,7 +250,7 @@ export function BuildingsTable({ columns, data }: BuildingsTableProps) {
                 <TableRow>
                   <TableCell
                     colSpan={columns.length}
-                    className="h-24 text-center"
+                    className="py-8 text-center text-gray-500"
                   >
                     Ingen eiendommer funnet.
                   </TableCell>
@@ -283,9 +258,13 @@ export function BuildingsTable({ columns, data }: BuildingsTableProps) {
               )}
             </TableBody>
           </Table>
-          <DataTableBulkEditor table={table} rowSelection={rowSelection} />
         </div>
-        <DataTablePagination table={table} pageSize={pageSize} />
+        <div className="flex flex-wrap items-center justify-between gap-y-4 p-1">
+          <div className="text-sm text-gray-500">
+            {table.getFilteredRowModel().rows.length} eiendommer
+          </div>
+          <DataTablePagination table={table} pageSize={pageSize} />
+        </div>
       </div>
     </>
   );

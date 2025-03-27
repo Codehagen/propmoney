@@ -11,6 +11,7 @@ import { DataTable } from "@/components/ui/data-table/DataTable";
 import { BuildingData } from "@/components/ui/buildings-table/columns";
 import { Badge } from "@/components/Badge";
 import { formatters } from "@/lib/utils";
+import { propertyTypes } from "@/components/ui/buildings-table/columns";
 import {
   RiAddLine,
   RiEditLine,
@@ -18,8 +19,15 @@ import {
   RiMailLine,
   RiMapPinLine,
 } from "@remixicon/react";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { AddTenant } from "./AddTenant";
+import { AddUnit } from "./AddUnit";
+import { CamCalculator } from "./CamCalculator";
+import { PropertyType } from "@prisma/client";
+import {
+  getBuildingUnits,
+  CommercialUnitData,
+} from "@/actions/building/get-building-units";
 
 // Mock data for tenants (would come from API in real implementation)
 const tenants = [
@@ -246,19 +254,176 @@ function TenantDrawer({
 const tabs = [
   { id: "dashboard", label: "Dashboard" },
   { id: "tenants", label: "Leietakere" },
+  { id: "units", label: "Enheter" },
   { id: "invoices", label: "Faktura" },
+  { id: "cam", label: "Felleskostnader" },
   { id: "settings", label: "Innstillinger" },
+];
+
+// Define columns for the commercial units table
+const unitColumns = [
+  {
+    accessorKey: "unitNumber",
+    header: "Enhet",
+  },
+  {
+    accessorKey: "description",
+    header: "Navn/beskrivelse",
+    cell: ({ row }: { row: any }) => {
+      const description = row.getValue("description");
+      return description || "—";
+    },
+  },
+  {
+    accessorKey: "floor",
+    header: "Etasje",
+  },
+  {
+    accessorKey: "bra",
+    header: "Areal (BRA)",
+    cell: ({ row }: { row: any }) => `${row.getValue("bra")} m²`,
+  },
+  {
+    accessorKey: "basePrice",
+    header: "Grunnpris per m²",
+    cell: ({ row }: { row: any }) =>
+      formatters.currency(row.getValue("basePrice"), "NOK"),
+  },
+  {
+    accessorKey: "isAvailable",
+    header: "Status",
+    cell: ({ row }: { row: any }) => (
+      <Badge variant={row.getValue("isAvailable") ? "warning" : "success"}>
+        {row.getValue("isAvailable") ? "Ledig" : "Utleid"}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: "currentTenant",
+    header: "Nåværende leietaker",
+    cell: ({ row }: { row: any }) => {
+      const tenant = row.getValue("currentTenant");
+      return tenant ? tenant.name : "—";
+    },
+  },
+  {
+    accessorKey: "leaseExpiration",
+    header: "Utløpsdato",
+    cell: ({ row }: { row: any }) => {
+      const date = row.getValue("leaseExpiration");
+      return date ? formatters.date(date) : "—";
+    },
+  },
+  {
+    accessorKey: "commonAreaFactor",
+    header: "Fellesarealfaktor",
+    cell: ({ row }: { row: any }) =>
+      row.getValue("commonAreaFactor").toFixed(2),
+  },
+  {
+    accessorKey: "rent",
+    header: "Månedlig leie",
+    cell: ({ row }: { row: any }) => {
+      const rent = row.getValue("rent");
+      return rent ? formatters.currency(rent, "NOK") : "—";
+    },
+  },
+];
+
+// Sample commercial units data (replace with API call in production)
+const commercialUnits = [
+  {
+    id: "1",
+    unitNumber: "A101",
+    floor: 1,
+    bra: 120,
+    basePrice: 1800,
+    isAvailable: false,
+    currentTenant: { id: "1", name: "Johan Andersen" },
+    leaseExpiration: "2024-01-14",
+    commonAreaFactor: 1.25,
+    rent: 225000,
+  },
+  {
+    id: "2",
+    unitNumber: "A102",
+    floor: 1,
+    bra: 95,
+    basePrice: 1700,
+    isAvailable: false,
+    currentTenant: { id: "2", name: "Marie Olsen" },
+    leaseExpiration: "2024-02-28",
+    commonAreaFactor: 1.25,
+    rent: 168000,
+  },
+  {
+    id: "3",
+    unitNumber: "B201",
+    floor: 2,
+    bra: 150,
+    basePrice: 2000,
+    isAvailable: true,
+    currentTenant: null,
+    leaseExpiration: null,
+    commonAreaFactor: 1.2,
+    rent: null,
+  },
+  {
+    id: "4",
+    unitNumber: "B202",
+    floor: 2,
+    bra: 110,
+    basePrice: 1900,
+    isAvailable: true,
+    currentTenant: null,
+    leaseExpiration: null,
+    commonAreaFactor: 1.2,
+    rent: null,
+  },
 ];
 
 interface BuildingDetailsPageProps {
   building: BuildingData;
+  userId: string;
 }
 
-export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
+export function BuildingDetailsPage({
+  building,
+  userId,
+}: BuildingDetailsPageProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isAddUnitOpen, setIsAddUnitOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [selectedTenant, setSelectedTenant] = useState<any>(null);
   const [buildingTenants, setBuildingTenants] = useState(tenants);
+  const [commercialUnits, setCommercialUnits] = useState<CommercialUnitData[]>(
+    []
+  );
+  const [isLoadingUnits, setIsLoadingUnits] = useState(false);
+
+  // Fetch commercial units when the tab is activated
+  useEffect(() => {
+    if (activeTab === "units") {
+      fetchCommercialUnits();
+    }
+  }, [activeTab, building.id]);
+
+  const fetchCommercialUnits = async () => {
+    try {
+      setIsLoadingUnits(true);
+      const result = await getBuildingUnits({
+        buildingId: building.id,
+      });
+
+      if (result.success && result.data) {
+        setCommercialUnits(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching commercial units:", error);
+    } finally {
+      setIsLoadingUnits(false);
+    }
+  };
 
   // Function to show tenant details
   const showTenantDetails = (tenant: any) => {
@@ -275,6 +440,11 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
     setBuildingTenants((current) => [...current, newTenant]);
   };
 
+  // Handle adding a new unit
+  const handleAddUnit = (newUnit: CommercialUnitData) => {
+    setCommercialUnits((current) => [...current, newUnit]);
+  };
+
   // Render content based on active tab
   const renderTabContent = () => {
     switch (activeTab) {
@@ -288,7 +458,8 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                   Eiendomsdetaljer
                 </dt>
                 <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
-                  {building.propertyType}
+                  {propertyTypes.find((p) => p.value === building.propertyType)
+                    ?.label || building.propertyType}
                 </dd>
                 <ul
                   role="list"
@@ -296,26 +467,26 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                 >
                   <li>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">Pris</span>
+                      <span className="text-sm text-gray-500">Klasse</span>
                     </div>
                     <span className="text-base font-semibold text-gray-900 dark:text-gray-50">
-                      {formatters.currency(building.price, "NOK")}/mnd
+                      {building.propertyClass || "Ikke spesifisert"}
                     </span>
                   </li>
                   <li>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">Soverom</span>
+                      <span className="text-sm text-gray-500">Areal (BTA)</span>
                     </div>
                     <span className="text-base font-semibold text-gray-900 dark:text-gray-50">
-                      {building.bedrooms}
+                      {formatters.number(building.totalBTA)} m²
                     </span>
                   </li>
                   <li>
                     <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">Bad</span>
+                      <span className="text-sm text-gray-500">Areal (BRA)</span>
                     </div>
                     <span className="text-base font-semibold text-gray-900 dark:text-gray-50">
-                      {building.bathrooms}
+                      {formatters.number(building.totalBRA)} m²
                     </span>
                   </li>
                   <li>
@@ -335,7 +506,7 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
 
               <Card>
                 <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
-                  Leietaker Status
+                  Utleie Status
                 </dt>
                 <div className="mt-4 flex flex-nowrap items-center justify-between gap-y-4">
                   <dd className="space-y-3">
@@ -345,40 +516,33 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                           className="size-2.5 shrink-0 rounded-sm bg-blue-500 dark:bg-blue-500"
                           aria-hidden="true"
                         />
-                        <span className="text-sm">Aktive leietakere</span>
+                        <span className="text-sm">Enheter</span>
                       </div>
                       <span className="mt-1 block text-2xl font-semibold text-gray-900 dark:text-gray-50">
-                        {
-                          buildingTenants.filter((t) => t.status === "active")
-                            .length
-                        }
+                        {building.unitCount || 0}
                       </span>
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <span
-                          className="size-2.5 shrink-0 rounded-sm bg-red-500 dark:bg-red-500"
+                          className="size-2.5 shrink-0 rounded-sm bg-green-500 dark:bg-green-500"
                           aria-hidden="true"
                         />
                         <span className="text-sm text-gray-900 dark:text-gray-50">
-                          Utløpte kontrakter
+                          Utleiegrad
                         </span>
                       </div>
                       <span className="mt-1 block text-2xl font-semibold text-gray-900 dark:text-gray-50">
-                        {
-                          buildingTenants.filter((t) => t.status === "inactive")
-                            .length
-                        }
+                        {formatters.percent(
+                          building.occupancyRate
+                            ? building.occupancyRate / 100
+                            : 0
+                        )}
                       </span>
                     </div>
                   </dd>
                   <ProgressCircle
-                    value={Math.round(
-                      (buildingTenants.filter((t) => t.status === "active")
-                        .length /
-                        buildingTenants.length) *
-                        100
-                    )}
+                    value={building.occupancyRate || 0}
                     radius={45}
                     strokeWidth={7}
                   />
@@ -397,11 +561,14 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                           className="size-2.5 shrink-0 rounded-sm bg-blue-500 dark:bg-blue-500"
                           aria-hidden="true"
                         />
-                        <span className="text-sm">Inntekt</span>
+                        <span className="text-sm">Beregnet inntekt</span>
                       </div>
                       <span className="mt-1 block text-2xl font-semibold text-gray-900 dark:text-gray-50">
                         {formatters.currency(
-                          building.price * buildingTenants.length,
+                          ((building.occupancyRate || 0) *
+                            building.totalBRA *
+                            1500) /
+                            100,
                           "NOK"
                         )}
                       </span>
@@ -412,10 +579,10 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                           className="size-2.5 shrink-0 rounded-sm bg-gray-400 dark:bg-gray-600"
                           aria-hidden="true"
                         />
-                        <span className="text-sm">Utgifter</span>
+                        <span className="text-sm">Årlige utgifter (est.)</span>
                       </div>
                       <span className="mt-1 block text-2xl font-semibold text-gray-900 dark:text-gray-50">
-                        {formatters.currency(5000, "NOK")}
+                        {formatters.currency(building.totalBTA * 300, "NOK")}
                       </span>
                     </div>
                   </dd>
@@ -545,7 +712,10 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                                 Månedlig leie:
                               </span>
                               <span className="font-medium">
-                                {formatters.currency(building.price, "NOK")}
+                                {formatters.currency(
+                                  Math.round(building.totalBRA * 150),
+                                  "NOK"
+                                )}
                               </span>
                             </div>
                             <div className="flex justify-between">
@@ -658,7 +828,10 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                                 Månedlig leie
                               </p>
                               <p className="text-sm font-medium">
-                                {formatters.currency(building.price, "NOK")}
+                                {formatters.currency(
+                                  Math.round(building.totalBRA * 150),
+                                  "NOK"
+                                )}
                               </p>
                             </div>
                             <div>
@@ -699,6 +872,102 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
                 )}
               </>
             )}
+          </div>
+        );
+      case "units":
+        return (
+          <div className="mt-8">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
+                Enheter
+              </h2>
+              <Button
+                variant="secondary"
+                className="flex items-center gap-2"
+                onClick={() => setIsAddUnitOpen(true)}
+              >
+                <RiAddLine className="size-4" />
+                Legg til enhet
+              </Button>
+            </div>
+
+            <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-3">
+              <Card>
+                <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                  Total enheter
+                </dt>
+                <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
+                  {commercialUnits.length}
+                </dd>
+                <p className="mt-2 text-sm text-gray-500">
+                  Total areal:{" "}
+                  {formatters.number(
+                    commercialUnits.reduce((sum, unit) => sum + unit.bra, 0)
+                  )}{" "}
+                  m²
+                </p>
+              </Card>
+
+              <Card>
+                <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                  Utleide enheter
+                </dt>
+                <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
+                  {commercialUnits.filter((unit) => !unit.isAvailable).length}
+                </dd>
+                <p className="mt-2 text-sm text-gray-500">
+                  {formatters.percent(
+                    commercialUnits.length
+                      ? commercialUnits.filter((unit) => !unit.isAvailable)
+                          .length / commercialUnits.length
+                      : 0
+                  )}
+                </p>
+              </Card>
+
+              <Card>
+                <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                  Ledige enheter
+                </dt>
+                <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
+                  {commercialUnits.filter((unit) => unit.isAvailable).length}
+                </dd>
+                <p className="mt-2 text-sm text-gray-500">
+                  Ledig areal:{" "}
+                  {formatters.number(
+                    commercialUnits
+                      .filter((unit) => unit.isAvailable)
+                      .reduce((sum, unit) => sum + unit.bra, 0)
+                  )}{" "}
+                  m²
+                </p>
+              </Card>
+            </div>
+
+            {isLoadingUnits ? (
+              <div className="py-10 text-center">
+                <p className="text-gray-500">Laster enheter...</p>
+              </div>
+            ) : commercialUnits.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 py-10 dark:border-gray-700">
+                <p className="text-center text-gray-500 dark:text-gray-400">
+                  Ingen enheter er registrert ennå. Klikk "Legg til enhet" for å
+                  komme i gang.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-gray-200 dark:border-gray-800">
+                <DataTable data={commercialUnits} columns={unitColumns} />
+              </div>
+            )}
+
+            <AddUnit
+              open={isAddUnitOpen}
+              onOpenChange={setIsAddUnitOpen}
+              buildingId={building.id}
+              userId={userId}
+              onAddUnit={handleAddUnit}
+            />
           </div>
         );
       case "invoices":
@@ -775,6 +1044,14 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
             </div>
           </div>
         );
+      case "cam":
+        return (
+          <CamCalculator
+            buildingId={building.id}
+            buildingTotalBRA={building.totalBRA}
+            userId={userId}
+          />
+        );
       case "settings":
         return (
           <div className="mt-8 flex flex-col items-center justify-center py-12">
@@ -825,6 +1102,7 @@ export function BuildingDetailsPage({ building }: BuildingDetailsPageProps) {
           open={isOpen}
           onOpenChange={setIsOpen}
           buildingId={building.id}
+          userId={userId}
           onAddTenant={handleAddTenant}
         />
       </div>

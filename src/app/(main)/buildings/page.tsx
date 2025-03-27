@@ -2,7 +2,6 @@ import { columns } from "@/components/ui/buildings-table/columns";
 import { BuildingsTable } from "@/components/ui/buildings-table/BuildingsTable";
 import { getBuildings } from "@/actions/building";
 import { getCurrentUser } from "@/actions/user";
-import { SeedDataButton } from "./SeedDataButton";
 import { BuildingData } from "@/components/ui/buildings-table/columns";
 
 export default async function BuildingsPage() {
@@ -27,11 +26,8 @@ export default async function BuildingsPage() {
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-semibold text-gray-900 sm:text-xl dark:text-gray-50">
-          Properties
+          Bygninger
         </h1>
-        {currentUser?.id && (
-          <SeedDataButton userId={currentUser.id} hasData={!!hasData} />
-        )}
       </div>
       <div className="mt-4 sm:mt-6 lg:mt-10">
         <BuildingsTable data={buildings} columns={columns} />
