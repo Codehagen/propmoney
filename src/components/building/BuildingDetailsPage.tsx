@@ -19,7 +19,7 @@ import {
   RiMailLine,
   RiMapPinLine,
 } from "@remixicon/react";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { AddTenant } from "./AddTenant";
 import { AddUnit } from "./AddUnit";
 import { CamCalculator } from "./CamCalculator";
@@ -28,6 +28,24 @@ import {
   getBuildingUnits,
   CommercialUnitData,
 } from "@/actions/building/get-building-units";
+
+// Define an extended tenant type that includes unit information
+interface ExtendedTenant {
+  id: string;
+  name: string;
+  email: string;
+  phone: string;
+  leaseStart: string;
+  leaseEnd: string;
+  rentPaid: boolean;
+  status: string;
+  rentDurationDays: number;
+  rentRemainingDays: number;
+  unitNumber: string;
+  rentedArea: number;
+  monthlyRent: number;
+  paymentStatus: boolean;
+}
 
 // Mock data for tenants (would come from API in real implementation)
 const tenants = [
@@ -127,31 +145,20 @@ const invoices = [
 const tenantColumns = [
   {
     accessorKey: "name",
-    header: "Navn",
-  },
-  {
-    accessorKey: "email",
-    header: "E-post",
+    header: "Leietaker",
     cell: ({ row }: { row: any }) => (
-      <a
-        href={`mailto:${row.getValue("email")}`}
-        className="text-indigo-600 hover:underline dark:text-indigo-400"
-      >
-        {row.getValue("email")}
-      </a>
+      <div className="font-medium">{row.getValue("name")}</div>
     ),
   },
   {
-    accessorKey: "phone",
-    header: "Telefon",
-    cell: ({ row }: { row: any }) => (
-      <a
-        href={`tel:${row.getValue("phone")}`}
-        className="text-indigo-600 hover:underline dark:text-indigo-400"
-      >
-        {row.getValue("phone")}
-      </a>
-    ),
+    accessorKey: "unitNumber",
+    header: "Enhet",
+  },
+  {
+    accessorKey: "rentedArea",
+    header: "Leid areal (m²)",
+    cell: ({ row }: { row: any }) =>
+      formatters.number(row.getValue("rentedArea")),
   },
   {
     accessorKey: "leaseStart",
@@ -165,6 +172,20 @@ const tenantColumns = [
     cell: ({ row }: { row: any }) => formatters.date(row.getValue("leaseEnd")),
   },
   {
+    accessorKey: "remainingDays",
+    header: "Gjenstående tid",
+    cell: ({ row }: { row: any }) => {
+      const days = row.getValue("remainingDays");
+      return days > 0 ? `${days} dager` : "Utløpt";
+    },
+  },
+  {
+    accessorKey: "monthlyRent",
+    header: "Månedlig leie",
+    cell: ({ row }: { row: any }) =>
+      formatters.currency(row.getValue("monthlyRent"), "NOK"),
+  },
+  {
     accessorKey: "status",
     header: "Status",
     cell: ({ row }: { row: any }) => (
@@ -172,6 +193,15 @@ const tenantColumns = [
         variant={row.getValue("status") === "active" ? "success" : "warning"}
       >
         {row.getValue("status") === "active" ? "Aktiv" : "Inaktiv"}
+      </Badge>
+    ),
+  },
+  {
+    accessorKey: "paymentStatus",
+    header: "Betalingsstatus",
+    cell: ({ row }: { row: any }) => (
+      <Badge variant={row.getValue("paymentStatus") ? "success" : "error"}>
+        {row.getValue("paymentStatus") ? "Betalt" : "Forfalt"}
       </Badge>
     ),
   },
@@ -401,6 +431,15 @@ export function BuildingDetailsPage({
   );
   const [isLoadingUnits, setIsLoadingUnits] = useState(false);
 
+  // Monitor table row selection and show tenant details when a row is selected
+  useEffect(() => {
+    // In a real implementation, we would integrate with the table's row selection
+    // and navigate to tenant details when selected
+    // For now we just show our existing details view on selection
+    // In a production app with Next.js, we would use:
+    // router.push(`/tenants/${selectedTenant.id}`);
+  }, [selectedTenant]);
+
   // Fetch commercial units when the tab is activated
   useEffect(() => {
     if (activeTab === "units") {
@@ -425,9 +464,13 @@ export function BuildingDetailsPage({
     }
   };
 
-  // Function to show tenant details
+  // Function to show tenant details - would be used with router navigation in production
   const showTenantDetails = (tenant: any) => {
     setSelectedTenant(tenant);
+    // In a real implementation, we would navigate to the tenant detail page
+    // For example with Next.js router:
+    // router.push(`/tenants/${tenant.id}`);
+    console.log(`Navigate to tenant details page for: ${tenant.id}`);
   };
 
   // Close tenant details
@@ -608,269 +651,103 @@ export function BuildingDetailsPage({
       case "tenants":
         return (
           <div className="mt-8">
-            {selectedTenant ? (
-              <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
-                    Leietaker informasjon
-                  </h2>
-                  <Button variant="secondary" onClick={closeTenantDetails}>
-                    Tilbake til oversikt
-                  </Button>
-                </div>
+            <div className="mb-6 flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
+                Leietakere
+              </h2>
+              <Button
+                variant="secondary"
+                className="flex items-center gap-2"
+                onClick={() => setIsOpen(true)}
+              >
+                <RiAddLine className="size-4" />
+                Legg til leietaker
+              </Button>
+            </div>
 
-                <Card className="p-6">
-                  <div className="space-y-6">
-                    <div>
-                      <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-50">
-                        {selectedTenant.name}
-                      </h3>
-                      <Badge
-                        variant={
-                          selectedTenant.status === "active"
-                            ? "success"
-                            : "warning"
-                        }
-                        className="mt-2"
-                      >
-                        {selectedTenant.status === "active"
-                          ? "Aktiv"
-                          : "Inaktiv"}
-                      </Badge>
-                    </div>
+            <div className="mb-6 grid grid-cols-1 gap-6 sm:grid-cols-4">
+              <Card>
+                <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                  Totalt antall leietakere
+                </dt>
+                <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
+                  {buildingTenants.length}
+                </dd>
+              </Card>
 
-                    <div className="grid gap-6 md:grid-cols-2">
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-500">
-                            Kontaktinformasjon
-                          </h4>
-                          <div className="mt-2 space-y-2">
-                            <div className="flex items-center gap-2">
-                              <RiMailLine className="text-gray-400" />
-                              <a
-                                href={`mailto:${selectedTenant.email}`}
-                                className="text-indigo-600 hover:underline dark:text-indigo-400"
-                              >
-                                {selectedTenant.email}
-                              </a>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <RiPhoneLine className="text-gray-400" />
-                              <a
-                                href={`tel:${selectedTenant.phone}`}
-                                className="text-indigo-600 hover:underline dark:text-indigo-400"
-                              >
-                                {selectedTenant.phone}
-                              </a>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <RiMapPinLine className="text-gray-400" />
-                              <span>
-                                {building.address}, {building.zipCode}{" "}
-                                {building.city}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
+              <Card>
+                <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                  Total utleid areal
+                </dt>
+                <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
+                  {formatters.number(
+                    (building.totalBRA * (building.occupancyRate || 0)) / 100
+                  )}{" "}
+                  m²
+                </dd>
+              </Card>
 
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="text-sm font-medium text-gray-500">
-                            Leiekontrakt
-                          </h4>
-                          <div className="mt-2 space-y-2">
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Start dato:</span>
-                              <span className="font-medium">
-                                {formatters.date(selectedTenant.leaseStart)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Slutt dato:</span>
-                              <span className="font-medium">
-                                {formatters.date(selectedTenant.leaseEnd)}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">Varighet:</span>
-                              <span className="font-medium">
-                                {selectedTenant.rentDurationDays} dager
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">
-                                Gjenværende tid:
-                              </span>
-                              <span className="font-medium">
-                                {selectedTenant.rentRemainingDays} dager
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">
-                                Månedlig leie:
-                              </span>
-                              <span className="font-medium">
-                                {formatters.currency(
-                                  Math.round(building.totalBRA * 150),
-                                  "NOK"
-                                )}
-                              </span>
-                            </div>
-                            <div className="flex justify-between">
-                              <span className="text-gray-500">
-                                Betalingsstatus:
-                              </span>
-                              <Badge
-                                variant={
-                                  selectedTenant.rentPaid ? "success" : "error"
-                                }
-                              >
-                                {selectedTenant.rentPaid ? "Betalt" : "Forfalt"}
-                              </Badge>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+              <Card>
+                <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                  Gjennomsnittlig leietid
+                </dt>
+                <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
+                  {formatters.number(
+                    buildingTenants.reduce(
+                      (sum, t) => sum + t.rentDurationDays,
+                      0
+                    ) /
+                      (buildingTenants.length || 1) /
+                      30
+                  )}{" "}
+                  mnd
+                </dd>
+              </Card>
 
-                    <div className="flex justify-end gap-3">
-                      <Button variant="secondary">Rediger informasjon</Button>
-                      <Button>Send beskjed</Button>
-                    </div>
-                  </div>
-                </Card>
+              <Card>
+                <dt className="text-sm font-medium text-gray-900 dark:text-gray-50">
+                  Betalingsstatus
+                </dt>
+                <dd className="mt-1 text-3xl font-semibold text-gray-900 dark:text-gray-50">
+                  {formatters.percent(
+                    buildingTenants.filter((t) => t.rentPaid).length /
+                      (buildingTenants.length || 1)
+                  )}
+                </dd>
+              </Card>
+            </div>
+
+            {buildingTenants.length === 0 ? (
+              <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 py-10 dark:border-gray-700">
+                <p className="text-center text-gray-500 dark:text-gray-400">
+                  Ingen leietakere er registrert ennå. Klikk "Legg til
+                  leietaker" for å komme i gang.
+                </p>
               </div>
             ) : (
-              <>
-                <div className="mb-6 flex items-center justify-between">
-                  <h2 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
-                    Leietakere
-                  </h2>
-                  <Button
-                    variant="secondary"
-                    className="flex items-center gap-2"
-                    onClick={() => setIsOpen(true)}
-                  >
-                    <RiAddLine className="size-4" />
-                    Legg til leietaker
-                  </Button>
+              <div>
+                <div className="rounded-lg">
+                  <DataTable
+                    data={buildingTenants.map((tenant) => {
+                      // Find tenant's unit if available
+                      const tenantUnit = commercialUnits.find(
+                        (unit) => unit.currentTenant?.id === tenant.id
+                      );
+
+                      return {
+                        ...tenant,
+                        unitNumber: tenantUnit?.unitNumber || "-",
+                        rentedArea: tenantUnit?.bra || 0,
+                        monthlyRent:
+                          tenantUnit?.rent || building.totalBRA * 150,
+                        paymentStatus: tenant.rentPaid,
+                        remainingDays: tenant.rentRemainingDays,
+                      };
+                    })}
+                    columns={tenantColumns}
+                  />
                 </div>
-
-                {buildingTenants.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-300 py-10 dark:border-gray-700">
-                    <p className="text-center text-gray-500 dark:text-gray-400">
-                      Ingen leietakere er registrert ennå. Klikk "Legg til
-                      leietaker" for å komme i gang.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                    {buildingTenants.map((tenant) => (
-                      <Card
-                        key={tenant.id}
-                        className="overflow-hidden hover:shadow-md transition-shadow cursor-pointer"
-                        onClick={() => showTenantDetails(tenant)}
-                      >
-                        <div className="p-6">
-                          <div className="flex justify-between items-start">
-                            <div>
-                              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-50">
-                                {tenant.name}
-                              </h3>
-                              <p className="mt-1 text-sm text-gray-500">
-                                <span className="inline-flex items-center gap-1">
-                                  <RiPhoneLine className="size-3.5" />
-                                  {tenant.phone}
-                                </span>
-                              </p>
-                              <p className="mt-1 text-sm text-gray-500">
-                                <span className="inline-flex items-center gap-1">
-                                  <RiMailLine className="size-3.5" />
-                                  {tenant.email}
-                                </span>
-                              </p>
-                            </div>
-                            <Badge
-                              variant={
-                                tenant.status === "active"
-                                  ? "success"
-                                  : "warning"
-                              }
-                            >
-                              {tenant.status === "active" ? "Aktiv" : "Inaktiv"}
-                            </Badge>
-                          </div>
-
-                          <div className="mt-4 grid grid-cols-2 gap-4 pt-4 border-t border-gray-200 dark:border-gray-800">
-                            <div>
-                              <p className="text-xs text-gray-500">
-                                Leieperiode
-                              </p>
-                              <p className="text-sm font-medium">
-                                {formatters.date(tenant.leaseStart)} -{" "}
-                                {formatters.date(tenant.leaseEnd)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500">
-                                Gjenstående tid
-                              </p>
-                              <p className="text-sm font-medium">
-                                {tenant.rentRemainingDays > 0
-                                  ? `${tenant.rentRemainingDays} dager`
-                                  : "Utløpt"}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500">
-                                Månedlig leie
-                              </p>
-                              <p className="text-sm font-medium">
-                                {formatters.currency(
-                                  Math.round(building.totalBRA * 150),
-                                  "NOK"
-                                )}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-xs text-gray-500">Betaling</p>
-                              <Badge
-                                variant={tenant.rentPaid ? "success" : "error"}
-                                className="mt-1"
-                              >
-                                {tenant.rentPaid ? "Betalt" : "Forfalt"}
-                              </Badge>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 flex justify-end">
-                            <span className="text-xs text-gray-500 hover:text-indigo-600 transition-colors inline-flex items-center gap-1">
-                              Se detaljer
-                              <svg
-                                width="16"
-                                height="16"
-                                viewBox="0 0 16 16"
-                                fill="none"
-                                xmlns="http://www.w3.org/2000/svg"
-                              >
-                                <path
-                                  d="M6 12L10 8L6 4"
-                                  stroke="currentColor"
-                                  strokeWidth="1.5"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                />
-                              </svg>
-                            </span>
-                          </div>
-                        </div>
-                      </Card>
-                    ))}
-                  </div>
-                )}
-              </>
+              </div>
             )}
           </div>
         );
@@ -956,7 +833,7 @@ export function BuildingDetailsPage({
                 </p>
               </div>
             ) : (
-              <div className="rounded-lg border border-gray-200 dark:border-gray-800">
+              <div className="rounded-lg">
                 <DataTable data={commercialUnits} columns={unitColumns} />
               </div>
             )}
@@ -1039,7 +916,7 @@ export function BuildingDetailsPage({
               </Card>
             </div>
 
-            <div className="rounded-lg border border-gray-200 dark:border-gray-800">
+            <div className="rounded-lg">
               <DataTable data={invoices} columns={invoiceColumns} />
             </div>
           </div>

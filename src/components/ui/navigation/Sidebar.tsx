@@ -6,6 +6,7 @@ import {
   RiLinkM,
   RiListCheck,
   RiSettings5Line,
+  RiTeamLine,
 } from "@remixicon/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -23,6 +24,11 @@ const navigation = [
     name: "Buildings",
     href: siteConfig.baseLinks.buildings,
     icon: RiHome2Line,
+  },
+  {
+    name: "Tenants",
+    href: siteConfig.baseLinks.tenants,
+    icon: RiTeamLine,
   },
   {
     name: "Settings",

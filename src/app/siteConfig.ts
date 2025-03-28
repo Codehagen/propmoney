@@ -7,6 +7,7 @@ export const siteConfig = {
     overview: "/overview",
     details: "/details",
     buildings: "/buildings",
+    tenants: "/tenants",
     settings: {
       general: "/settings/general",
       billing: "/settings/billing",
